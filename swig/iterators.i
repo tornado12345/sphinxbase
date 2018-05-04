@@ -13,12 +13,26 @@
 %}
 #endif
 
-// Basic types
-%inline %{
+#if SWIGCSHARP
+%typemap(csinterfaces) TYPE##Iterator "global::System.Collections.IEnumerator"
+%typemap(cscode) TYPE##Iterator %{
+  public object Current 
+  {
+     get
+     {
+       return GetCurrent();
+     }
+  }
+%}
+#endif
+
+// Structure
+%begin %{
 typedef struct {
   PREFIX##_t *ptr;
 } TYPE##Iterator;
 %}
+typedef struct {} TYPE##Iterator;
 
 // Exception to end iteration
 
@@ -51,9 +65,10 @@ typedef struct {
 // Implementation of the iterator itself
 
 %extend TYPE##Iterator {
-  TYPE##Iterator(PREFIX##_t *ptr) {
+
+  TYPE##Iterator(void *ptr) {
     TYPE##Iterator *iter = (TYPE##Iterator *)ckd_malloc(sizeof *iter);
-    iter->ptr = ptr;
+    iter->ptr = (PREFIX##_t *)ptr;
     return iter;
   }
 
@@ -110,7 +125,28 @@ typedef struct {
     }
     return NULL;
   }
+#elif SWIGCSHARP
+  bool MoveNext() {
+    if(!$self || !$self->ptr)
+        return false;
+    $self->ptr = ##PREFIX##_next($self->ptr);
+    if ($self->ptr) {
+	return true;
+    }
+    return false;
+  }
+  
+  void Reset() {
+    return;
+  }
+
+  VALUE_TYPE *GetCurrent() {
+    VALUE_TYPE *value = ##VALUE_TYPE##_fromIter($self->ptr);
+    return value;
+  }
 #endif
+
+
 }
 
 #endif // SWIGRUBY
@@ -124,6 +160,15 @@ typedef struct {
 
 #if SWIGJAVA
 %typemap(javainterfaces) TYPE "Iterable<"#VALUE_TYPE">"
+#endif
+
+#if SWIGCSHARP
+%typemap(csinterfaces) TYPE "global::System.Collections.IEnumerable"
+%typemap(cscode) TYPE %{
+  global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() {
+     return (global::System.Collections.IEnumerator) GetEnumerator();
+  }
+%}
 #endif
 
 %extend TYPE {
@@ -158,6 +203,11 @@ typedef struct {
   ITER_TYPE##Iterator * iterator() {
     return new_##ITER_TYPE##Iterator(INIT_PREFIX##($self));
   }
+#elif SWIGCSHARP
+  %newobject get_enumerator;
+  ITER_TYPE##Iterator *get_enumerator() {
+    return new_##ITER_TYPE##Iterator(INIT_PREFIX##($self));
+  } 
 
 #else  /* PYTHON, JS */
   %newobject __iter__;
